@@ -7,12 +7,16 @@
 #
 # SPDX-License-Identifier:    BSD-3-Clause
 
+# 2010-01-22 - SL - Llichen-80 extensions
+
 from __future__ import absolute_import
 
 import codecs
 import os
 import sys
 import threading
+
+from llichen80 import llichen   # All of the Llichen-80 extensions are through here.
 
 import serial
 from serial.tools.list_ports import comports
@@ -496,6 +500,7 @@ class Miniterm(object):
             self.alive = False
             raise
 
+
     def handle_menu_key(self, c):
         """Implement a simple menu / settings"""
         if c == self.menu_character or c == self.exit_character:
@@ -503,6 +508,8 @@ class Miniterm(object):
             self.serial.write(self.tx_encoder.encode(c))
             if self.echo:
                 self.console.write(c)
+        elif c == '\x07':                       # CTRL-G -> toggle GPIO pin
+            llichen.toggle_gpio_pin()
         elif c == '\x15':                       # CTRL+U -> upload file
             self.upload_file()
         elif c in '\x08hH?':                    # CTRL+H, h, H, ? -> Show help
@@ -544,7 +551,7 @@ class Miniterm(object):
         elif c == '8':                          # 8 -> change to 8 bits
             self.serial.bytesize = serial.EIGHTBITS
             self.dump_port_settings()
-        elif c == '7':                          # 7 -> change to 8 bits
+        elif c == '7':                          # 7 -> change to 7 bits
             self.serial.bytesize = serial.SEVENBITS
             self.dump_port_settings()
         elif c in 'eE':                         # E -> change to even parity
@@ -756,13 +763,15 @@ class Miniterm(object):
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # default args can be used to override when calling main() from an other script
 # e.g to create a miniterm-my-device.py
-def main(default_port=None, default_baudrate=9600, default_rts=None, default_dtr=None):
+def main(default_port=None, default_baudrate=115200, default_rts=None, default_dtr=None):
     """Command line tool, entry point"""
 
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Miniterm - A simple terminal program for the serial port.')
+        description='Miniterm - A simple terminal program for the serial port.\n'
+            + 'With Llichen 80 extensions by yorgle@gmail.com'
+        )
 
     parser.add_argument(
         'port',
