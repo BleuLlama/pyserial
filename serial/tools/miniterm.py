@@ -16,7 +16,7 @@ import os
 import sys
 import threading
 
-from llichen80 import llichen   # All of the Llichen-80 extensions are through here.
+from llichen80 import Llichen   # All of the Llichen-80 extensions are through here.
 
 import serial
 from serial.tools.list_ports import comports
@@ -449,6 +449,12 @@ class Miniterm(object):
             while self.alive and self._reader_alive:
                 # read all that is there or wait for one byte
                 data = self.serial.read(self.serial.in_waiting or 1)
+                
+                # filter it through the interceptor
+                if( data ):
+                    data = self.interceptor.receivedFromTarget( data )
+
+                # now send it through the remaining channels, if there's anything to do
                 if data:
                     if self.raw:
                         self.console.write_bytes(data)
@@ -508,8 +514,10 @@ class Miniterm(object):
             self.serial.write(self.tx_encoder.encode(c))
             if self.echo:
                 self.console.write(c)
-        elif c == '\x07':                       # CTRL-G -> toggle GPIO pin
-            llichen.toggle_gpio_pin()
+
+        elif c == self.interceptor.get_command_key(): 
+            self.interceptor.do_command()
+
         elif c == '\x15':                       # CTRL+U -> upload file
             self.upload_file()
         elif c in '\x08hH?':                    # CTRL+H, h, H, ? -> Show help
@@ -586,6 +594,12 @@ class Miniterm(object):
             self.dump_port_settings()
         else:
             sys.stderr.write('--- unknown menu character {} --\n'.format(key_description(c)))
+
+    def raw_tx( self, text ):
+        """raw transmit out to the target """
+        self.serial.write( text )
+        # Wait for output buffer to drain.
+        self.serial.flush()
 
     def upload_file(self):
         """Ask user for filenname and send its contents"""
@@ -723,7 +737,7 @@ class Miniterm(object):
         """return the help text"""
         # help text, starts with blank line!
         return """
---- pySerial ({version}) - miniterm - help
+--- pySerial ({version}) - miniterm+interceptor- help
 ---
 --- {exit:8} Exit program
 --- {menu:8} Menu escape key, followed by:
@@ -734,6 +748,7 @@ class Miniterm(object):
 ---    {upload:7} Upload file (prompt will be shown)
 ---    {repr:7} encoding
 ---    {filter:7} edit filters
+---    {interceptorKey:7} {interceptor}
 --- Toggles:
 ---    {rts:7} RTS   {dtr:7} DTR   {brk:7} BREAK
 ---    {echo:7} echo  {eol:7} EOL
@@ -757,7 +772,10 @@ class Miniterm(object):
            upload=key_description('\x15'),
            repr=key_description('\x01'),
            filter=key_description('\x06'),
-           eol=key_description('\x0c'))
+           eol=key_description('\x0c'),
+           interceptor=self.interceptor.get_help_text(),
+           interceptorKey=key_description( self.interceptor.get_command_key() ),
+           )
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -972,6 +990,9 @@ def main(default_port=None, default_baudrate=115200, default_rts=None, default_d
     miniterm.raw = args.raw
     miniterm.set_rx_encoding(args.serial_port_encoding)
     miniterm.set_tx_encoding(args.serial_port_encoding)
+
+    miniterm.interceptor = Llichen()
+    miniterm.interceptor.set_miniterm( miniterm ) 
 
     if not args.quiet:
         sys.stderr.write('--- Miniterm on {p.name}  {p.baudrate},{p.bytesize},{p.parity},{p.stopbits} ---\n'.format(

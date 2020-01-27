@@ -14,7 +14,7 @@
 #
 
 import sys
-from time import sleep
+import time
 
 
 class Interceptor(object):
